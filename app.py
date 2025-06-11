@@ -3,18 +3,11 @@ import pandas as pd
 import random
 from datetime import datetime, timedelta
 import io
-import os
-from supabase import create_client, Client
 from ui import (
     load_css, render_header, render_upload_section,
     render_scanner_selection, render_customer_input,
     render_admin_dashboard, render_customer_portal
 )
-
-# Supabase connection
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://your-project.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "your-anon-or-service-role-key")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Set page config
 st.set_page_config(
@@ -125,11 +118,15 @@ with tab1:
             
             if selected_scanner:
                 st.session_state.current_customer_serial = selected_scanner['Serial No']
-                # Show customer input and ticket submission only after a real scanner is selected
+                
+                # Customer input
                 case_nature, problem, comments = render_customer_input(selected_scanner)
+                
+                # Directly submit ticket to OEM after customer input
                 if st.button("Submit Ticket to OEM"):
                     ticket_id = f"TICKET-{random.randint(10000, 99999)}"
                     service_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+                    
                     # Update master sheet
                     mask = st.session_state.master_sheet['Serial No'] == selected_scanner['Serial No']
                     if mask.any():
@@ -143,6 +140,7 @@ with tab1:
                             "status": "Open"
                         }])
                         st.session_state.master_sheet = pd.concat([st.session_state.master_sheet, new_row], ignore_index=True)
+                    
                     st.markdown(f"""
                     <div style='background: linear-gradient(90deg, #f8fafc 0%, #ffe5e5 100%); border-left: 6px solid #b22222; padding: 1.5rem; border-radius: 10px; margin-bottom: 1.5rem;'>
                         <h3 style='color: #b22222;'>✅ Ticket submitted to OEM successfully!</h3>
@@ -152,31 +150,6 @@ with tab1:
                         </p>
                     </div>
                     """, unsafe_allow_html=True)
-
-                    # --- Supabase: Insert ticket into 'tickets' table ---
-                    ticket_data = {
-                        "ticket_id": ticket_id,
-                        "company": selected_scanner['Company Name'],
-                        "contact": selected_scanner['Contact Person Name'],
-                        "phone": selected_scanner['Phone Number'],
-                        "mobile": selected_scanner['Mobile Number'],
-                        "email": selected_scanner['Email'],
-                        "address": selected_scanner['Address'],
-                        "city": selected_scanner['City'],
-                        "state": selected_scanner['State'],
-                        "pincode": selected_scanner['Pincode'],
-                        "product": selected_scanner['Select Product'],
-                        "serial_no": selected_scanner['Serial No'],
-                        "case_nature": case_nature,
-                        "problem": problem,
-                        "comments": comments,
-                        "service_date": service_date,
-                        "status": "Open"
-                    }
-                    try:
-                        supabase.table("tickets").insert(ticket_data).execute()
-                    except Exception as db_exc:
-                        st.warning(f"Could not save ticket to Supabase: {db_exc}")
 
                     # --- Go to OEM Ticket Page button ---
                     import urllib.parse
