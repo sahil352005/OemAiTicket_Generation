@@ -3,6 +3,7 @@ import pandas as pd
 import random
 from datetime import datetime, timedelta
 import io
+import json
 from ui import (
     load_css, render_header, render_upload_section,
     render_scanner_selection, render_customer_input,
@@ -20,20 +21,47 @@ st.set_page_config(
 # Load custom CSS
 load_css()
 
-# Initialize session state
-if 'master_sheet' not in st.session_state:
-    st.session_state.master_sheet = pd.DataFrame(columns=[
-        "Company Name", "Contact Person Name", "Phone Number", "Mobile Number",
-        "Email", "Address", "City", "State", "Pincode", "Select Product",
-        "Serial No", "Select Case Nature", "Enter Comments / Problem",
-        "ticket", "status"
-    ])
+def restore_state():
+    """Restore state from session state"""
+    if 'master_sheet_data' in st.session_state:
+        try:
+            st.session_state.master_sheet = pd.DataFrame(json.loads(st.session_state.master_sheet_data))
+        except:
+            st.session_state.master_sheet = pd.DataFrame(columns=[
+                "Company Name", "Contact Person Name", "Phone Number", "Mobile Number",
+                "Email", "Address", "City", "State", "Pincode", "Select Product",
+                "Serial No", "Select Case Nature", "Enter Comments / Problem",
+                "ticket", "status"
+            ])
+    else:
+        st.session_state.master_sheet = pd.DataFrame(columns=[
+            "Company Name", "Contact Person Name", "Phone Number", "Mobile Number",
+            "Email", "Address", "City", "State", "Pincode", "Select Product",
+            "Serial No", "Select Case Nature", "Enter Comments / Problem",
+            "ticket", "status"
+        ])
 
-if 'current_customer_serial' not in st.session_state:
-    st.session_state.current_customer_serial = ""
+    if 'scanners_data' in st.session_state:
+        try:
+            st.session_state.scanners = json.loads(st.session_state.scanners_data)
+        except:
+            st.session_state.scanners = []
+    else:
+        st.session_state.scanners = []
 
-if 'scanners' not in st.session_state:
-    st.session_state.scanners = []
+    if 'current_customer_serial' not in st.session_state:
+        st.session_state.current_customer_serial = ""
+
+# Initialize or restore state
+restore_state()
+
+# Function to save state
+def save_state():
+    """Save current state to session state"""
+    if not st.session_state.master_sheet.empty:
+        st.session_state.master_sheet_data = st.session_state.master_sheet.to_json()
+    if st.session_state.scanners:
+        st.session_state.scanners_data = json.dumps(st.session_state.scanners)
 
 # Render header
 render_header()
@@ -111,6 +139,7 @@ with tab1:
                     df[col] = df[col].astype(str).str.strip()
             
             st.session_state.scanners = df.to_dict('records')
+            save_state()  # Save state after updating scanners
             st.success("CSV data loaded successfully!")
             
             # Scanner selection
@@ -140,6 +169,8 @@ with tab1:
                             "status": "Open"
                         }])
                         st.session_state.master_sheet = pd.concat([st.session_state.master_sheet, new_row], ignore_index=True)
+                    
+                    save_state()  # Save state after updating master sheet
                     
                     st.markdown(f"""
                     <div style='background: linear-gradient(90deg, #f8fafc 0%, #ffe5e5 100%); border-left: 6px solid #b22222; padding: 1.5rem; border-radius: 10px; margin-bottom: 1.5rem;'>
@@ -193,5 +224,6 @@ with tab3:
     if ticket_to_close and st.button("Close Selected Ticket"):
         mask = st.session_state.master_sheet['ticket'] == ticket_to_close
         st.session_state.master_sheet.loc[mask, 'status'] = "Closed"
+        save_state()  # Save state after closing ticket
         st.success(f"Ticket {ticket_to_close} has been closed successfully!")
-        st.experimental_rerun() 
+        st.rerun() 

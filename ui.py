@@ -281,30 +281,45 @@ def render_customer_input(scanner):
     return case_nature, problem, comments
 
 def render_customer_portal(customer_tickets):
-    """Render the customer portal section"""
-    st.header("Customer Portal")
-    st.subheader("Your Support Tickets")
-    
+    """Render the customer portal section with a styled table."""
+    st.markdown("""
+        <div style='background: linear-gradient(90deg, #fff 0%, #ffe5e5 100%); border-radius: 12px; box-shadow: 0 2px 12px rgba(178,34,34,0.07); padding: 1.5rem; margin-bottom: 2rem; border-left: 6px solid #b22222;'>
+            <h2 style='color: #b22222; margin-bottom: 1rem;'>Customer Portal</h2>
+            <h4 style='color: #b22222; margin-bottom: 1.5rem;'>Your Support Tickets</h4>
+    """, unsafe_allow_html=True)
     if customer_tickets.empty:
         st.info("No tickets found.")
     else:
-        st.dataframe(customer_tickets, use_container_width=True)
+        df = customer_tickets.copy()
+        if 'status' in df.columns:
+            df['status'] = df['status'].apply(lambda x: f"🟢 {x}" if x == 'Open' else (f"🔴 {x}" if x == 'Closed' else x))
+        if 'ticket' in df.columns:
+            df['ticket'] = df['ticket'].apply(lambda x: f"<b>{x}</b>" if x and x != 'nan' else "")
+        st.dataframe(df.style.format(na_rep="").hide(axis='index'), use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 def render_admin_dashboard(master_sheet):
-    """Render the admin dashboard section"""
-    st.header("Admin Dashboard")
-    st.subheader("Ticket Management")
-    
+    """Render the admin dashboard section with a styled table."""
+    st.markdown("""
+        <div style='background: linear-gradient(90deg, #fff 0%, #ffe5e5 100%); border-radius: 12px; box-shadow: 0 2px 12px rgba(178,34,34,0.07); padding: 1.5rem; margin-bottom: 2rem; border-left: 6px solid #b22222;'>
+            <h2 style='color: #b22222; margin-bottom: 1rem;'>Admin Dashboard</h2>
+            <h4 style='color: #b22222; margin-bottom: 1.5rem;'>Ticket Management</h4>
+    """, unsafe_allow_html=True)
     if master_sheet.empty:
         st.info("No tickets available.")
     else:
-        st.dataframe(master_sheet, use_container_width=True)
-        
+        df = master_sheet.copy()
+        if 'status' in df.columns:
+            df['status'] = df['status'].apply(lambda x: f"🟢 {x}" if x == 'Open' else (f"🔴 {x}" if x == 'Closed' else x))
+        if 'ticket' in df.columns:
+            df['ticket'] = df['ticket'].apply(lambda x: f"<b>{x}</b>" if x and x != 'nan' else "")
+        st.dataframe(df.style.format(na_rep="").hide(axis='index'), use_container_width=True)
+        st.markdown("<hr>", unsafe_allow_html=True)
         # Close ticket functionality
         st.subheader("Close Ticket")
         ticket_to_close = st.selectbox(
             "Select Ticket to Close",
             options=master_sheet[master_sheet['status'] == 'Open']['ticket'].tolist()
         )
-        
-        return ticket_to_close 
+        return ticket_to_close
+    st.markdown("</div>", unsafe_allow_html=True) 
