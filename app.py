@@ -138,6 +138,52 @@ with tab1:
                 if df[col].dtype == 'object':
                     df[col] = df[col].astype(str).str.strip()
             
+            # Add ticket and status columns if they don't exist
+            if 'ticket' not in df.columns:
+                df['ticket'] = ''
+            if 'status' not in df.columns:
+                df['status'] = ''
+            
+            # Display the CSV data
+            st.markdown("### Uploaded CSV Data")
+            # Update the dataframe with latest ticket information from master sheet
+            if not st.session_state.master_sheet.empty:
+                # Create a mapping of Serial No to ticket and status
+                ticket_map = st.session_state.master_sheet.set_index('Serial No')[['ticket', 'status']].to_dict('index')
+                # Update the dataframe with ticket information
+                df['ticket'] = df['Serial No'].map(lambda x: ticket_map.get(x, {}).get('ticket', ''))
+                df['status'] = df['Serial No'].map(lambda x: ticket_map.get(x, {}).get('status', ''))
+            
+            # Format the display
+            display_df = df.copy()
+            if 'status' in display_df.columns:
+                display_df['status'] = display_df['status'].apply(
+                    lambda x: f"🟢 {x}" if x == 'Open' else (f"🔴 {x}" if x == 'Closed' else x)
+                )
+            if 'ticket' in display_df.columns:
+                display_df['ticket'] = display_df['ticket'].apply(
+                    lambda x: x if x and str(x).lower() != 'nan' else ""
+                )
+            
+            st.dataframe(display_df, use_container_width=True)
+            
+            # Display ticket information if available
+            if not df.empty and 'ticket' in df.columns:
+                st.markdown("### Active Tickets")
+                ticket_df = df[df['ticket'].notna() & (df['ticket'] != '')]
+                if not ticket_df.empty:
+                    # Format the ticket information
+                    display_df = ticket_df[['Serial No', 'Select Product', 'ticket', 'status']].copy()
+                    display_df['status'] = display_df['status'].apply(
+                        lambda x: f"🟢 {x}" if x == 'Open' else (f"🔴 {x}" if x == 'Closed' else x)
+                    )
+                    st.dataframe(
+                        display_df.style.format(na_rep="").hide(axis='index'),
+                        use_container_width=True
+                    )
+                else:
+                    st.info("No tickets have been generated yet.")
+            
             st.session_state.scanners = df.to_dict('records')
             save_state()  # Save state after updating scanners
             st.success("CSV data loaded successfully!")
@@ -148,65 +194,71 @@ with tab1:
             if selected_scanner:
                 st.session_state.current_customer_serial = selected_scanner['Serial No']
                 
-                # Customer input
-                case_nature, problem, comments = render_customer_input(selected_scanner)
-                
-                # Directly submit ticket to OEM after customer input
-                if st.button("Submit Ticket to OEM"):
-                    ticket_id = f"TICKET-{random.randint(10000, 99999)}"
-                    service_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+                # Check if ticket already exists
+                existing_ticket = selected_scanner.get('ticket', '')
+                if existing_ticket and str(existing_ticket).lower() != 'nan':
+                    st.warning(f"This scanner already has a ticket: {existing_ticket}")
+                    st.info("Please select a different scanner or use the existing ticket.")
+                else:
+                    # Customer input
+                    case_nature, problem, comments = render_customer_input(selected_scanner)
                     
-                    # Update master sheet
-                    mask = st.session_state.master_sheet['Serial No'] == selected_scanner['Serial No']
-                    if mask.any():
-                        st.session_state.master_sheet.loc[mask, ['ticket', 'status']] = [
-                            ticket_id, "Open"
-                        ]
-                    else:
-                        new_row = pd.DataFrame([{
-                            **selected_scanner,
-                            "ticket": ticket_id,
-                            "status": "Open"
-                        }])
-                        st.session_state.master_sheet = pd.concat([st.session_state.master_sheet, new_row], ignore_index=True)
-                    
-                    save_state()  # Save state after updating master sheet
-                    
-                    st.markdown(f"""
-                    <div style='background: linear-gradient(90deg, #f8fafc 0%, #ffe5e5 100%); border-left: 6px solid #b22222; padding: 1.5rem; border-radius: 10px; margin-bottom: 1.5rem;'>
-                        <h3 style='color: #b22222;'>✅ Ticket submitted to OEM successfully!</h3>
-                        <p style='color: #333; font-size: 1.1em;'>
-                        <b>Ticket:</b> {ticket_id} for <b>{selected_scanner['Select Product']}</b><br>
-                        <b>Service scheduled:</b> {service_date}
-                        </p>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    # Directly submit ticket to OEM after customer input
+                    if st.button("Submit Ticket to OEM"):
+                        ticket_id = f"TICKET-{random.randint(10000, 99999)}"
+                        service_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+                        
+                        # Update master sheet
+                        mask = st.session_state.master_sheet['Serial No'] == selected_scanner['Serial No']
+                        if mask.any():
+                            st.session_state.master_sheet.loc[mask, ['ticket', 'status']] = [
+                                ticket_id, "Open"
+                            ]
+                        else:
+                            new_row = pd.DataFrame([{
+                                **selected_scanner,
+                                "ticket": ticket_id,
+                                "status": "Open"
+                            }])
+                            st.session_state.master_sheet = pd.concat([st.session_state.master_sheet, new_row], ignore_index=True)
+                        
+                        save_state()  # Save state after updating master sheet
+                        
+                        st.markdown(f"""
+                        <div style='background: linear-gradient(90deg, #f8fafc 0%, #ffe5e5 100%); border-left: 6px solid #b22222; padding: 1.5rem; border-radius: 10px; margin-bottom: 1.5rem;'>
+                            <h3 style='color: #b22222;'>✅ Ticket submitted to OEM successfully!</h3>
+                            <p style='color: #333; font-size: 1.1em;'>
+                            <b>Ticket:</b> {ticket_id} for <b>{selected_scanner['Select Product']}</b><br>
+                            <b>Service scheduled:</b> {service_date}
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
 
-                    # --- Go to OEM Ticket Page button ---
-                    import urllib.parse
-                    params = {
-                        'ticket_id': ticket_id,
-                        'company': selected_scanner['Company Name'],
-                        'contact': selected_scanner['Contact Person Name'],
-                        'phone': selected_scanner['Phone Number'],
-                        'mobile': selected_scanner['Mobile Number'],
-                        'email': selected_scanner['Email'],
-                        'address': selected_scanner['Address'],
-                        'city': selected_scanner['City'],
-                        'state': selected_scanner['State'],
-                        'pincode': selected_scanner['Pincode'],
-                        'product': selected_scanner['Select Product'],
-                        'serial_no': selected_scanner['Serial No'],
-                        'case_nature': case_nature,
-                        'problem': problem,
-                        'comments': comments,
-                        'service_date': service_date
-                    }
-                    base_url = 'http://localhost:8502'  # Default Streamlit port for second app
-                    query = urllib.parse.urlencode(params)
-                    oem_url = f"{base_url}/?{query}"
-                    st.markdown("<hr>", unsafe_allow_html=True)
-                    st.markdown(f'<a href="{oem_url}" target="_blank"><button style="background: linear-gradient(90deg, #b22222 0%, #ff7f7f 100%); color: white; border: none; border-radius: 8px; padding: 0.75rem 2rem; font-size: 1.1em; font-weight: bold; margin-top: 1rem; cursor: pointer;">Go to OEM Ticket Page</button></a>', unsafe_allow_html=True)
+                        # --- Go to OEM Ticket Page button ---
+                        import urllib.parse
+                        params = {
+                            'ticket_id': ticket_id,
+                            'company': selected_scanner['Company Name'],
+                            'contact': selected_scanner['Contact Person Name'],
+                            'phone': selected_scanner['Phone Number'],
+                            'mobile': selected_scanner['Mobile Number'],
+                            'email': selected_scanner['Email'],
+                            'address': selected_scanner['Address'],
+                            'city': selected_scanner['City'],
+                            'state': selected_scanner['State'],
+                            'pincode': selected_scanner['Pincode'],
+                            'product': selected_scanner['Select Product'],
+                            'serial_no': selected_scanner['Serial No'],
+                            'case_nature': case_nature,
+                            'problem': problem,
+                            'comments': comments,
+                            'service_date': service_date
+                        }
+                        base_url = 'http://localhost:8502'  # Default Streamlit port for second app
+                        query = urllib.parse.urlencode(params)
+                        oem_url = f"{base_url}/?{query}"
+                        st.markdown("<hr>", unsafe_allow_html=True)
+                        st.markdown(f'<a href="{oem_url}" target="_blank"><button style="background: linear-gradient(90deg, #b22222 0%, #ff7f7f 100%); color: white; border: none; border-radius: 8px; padding: 0.75rem 2rem; font-size: 1.1em; font-weight: bold; margin-top: 1rem; cursor: pointer;">Go to OEM Ticket Page</button></a>', unsafe_allow_html=True)
         
         except Exception as e:
             st.error(f"Error processing CSV file: {str(e)}")

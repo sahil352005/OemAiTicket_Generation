@@ -291,11 +291,23 @@ def render_customer_portal(customer_tickets):
         st.info("No tickets found.")
     else:
         df = customer_tickets.copy()
+        # Format status with emojis
         if 'status' in df.columns:
-            df['status'] = df['status'].apply(lambda x: f"🟢 {x}" if x == 'Open' else (f"🔴 {x}" if x == 'Closed' else x))
+            df['status'] = df['status'].apply(
+                lambda x: f"🟢 {x}" if x == 'Open' else (f"🔴 {x}" if x == 'Closed' else x)
+            )
+        # Format ticket numbers
         if 'ticket' in df.columns:
-            df['ticket'] = df['ticket'].apply(lambda x: f"<b>{x}</b>" if x and x != 'nan' else "")
-        st.dataframe(df.style.format(na_rep="").hide(axis='index'), use_container_width=True)
+            df['ticket'] = df['ticket'].apply(
+                lambda x: x if x and str(x).lower() != 'nan' else ""
+            )
+        # Select and reorder columns for display
+        display_columns = ['ticket', 'status', 'Select Product', 'Serial No', 'Select Case Nature', 'Enter Comments / Problem']
+        display_df = df[display_columns].copy()
+        st.dataframe(
+            display_df.style.format(na_rep="").hide(axis='index'),
+            use_container_width=True
+        )
     st.markdown("</div>", unsafe_allow_html=True)
 
 def render_admin_dashboard(master_sheet):
@@ -309,17 +321,47 @@ def render_admin_dashboard(master_sheet):
         st.info("No tickets available.")
     else:
         df = master_sheet.copy()
+        # Format status with emojis
         if 'status' in df.columns:
-            df['status'] = df['status'].apply(lambda x: f"🟢 {x}" if x == 'Open' else (f"🔴 {x}" if x == 'Closed' else x))
+            df['status'] = df['status'].apply(
+                lambda x: f"🟢 {x}" if x == 'Open' else (f"🔴 {x}" if x == 'Closed' else x)
+            )
+        # Format ticket numbers
         if 'ticket' in df.columns:
-            df['ticket'] = df['ticket'].apply(lambda x: f"<b>{x}</b>" if x and x != 'nan' else "")
-        st.dataframe(df.style.format(na_rep="").hide(axis='index'), use_container_width=True)
+            df['ticket'] = df['ticket'].apply(
+                lambda x: x if x and str(x).lower() != 'nan' else ""
+            )
+        # Select and reorder columns for display
+        display_columns = ['ticket', 'status', 'Company Name', 'Contact Person Name', 'Select Product', 'Serial No', 'Select Case Nature', 'Enter Comments / Problem']
+        display_df = df[display_columns].copy()
+        
+        # Add a summary of ticket statuses
+        total_tickets = len(df)
+        open_tickets = len(df[df['status'].str.contains('Open', na=False)])
+        closed_tickets = len(df[df['status'].str.contains('Closed', na=False)])
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Tickets", total_tickets)
+        with col2:
+            st.metric("Open Tickets", open_tickets)
+        with col3:
+            st.metric("Closed Tickets", closed_tickets)
+            
+        st.dataframe(
+            display_df.style.format(na_rep="").hide(axis='index'),
+            use_container_width=True
+        )
         st.markdown("<hr>", unsafe_allow_html=True)
         # Close ticket functionality
         st.subheader("Close Ticket")
-        ticket_to_close = st.selectbox(
-            "Select Ticket to Close",
-            options=master_sheet[master_sheet['status'] == 'Open']['ticket'].tolist()
-        )
-        return ticket_to_close
+        open_tickets = master_sheet[master_sheet['status'] == 'Open']['ticket'].tolist()
+        if open_tickets:
+            ticket_to_close = st.selectbox(
+                "Select Ticket to Close",
+                options=open_tickets
+            )
+            return ticket_to_close
+        else:
+            st.info("No open tickets available to close.")
     st.markdown("</div>", unsafe_allow_html=True) 
